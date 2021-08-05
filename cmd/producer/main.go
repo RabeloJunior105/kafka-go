@@ -8,14 +8,19 @@ import (
 )
 
 func main() {
-	fmt.Println("Starting the server GO")
+	delivyChan := make(chan kafka.Event)
 	producer := NewKafkaProducer()
 
-	publish("message", "teste", producer, nil)
-	/*
-		- Flush: esperar a mensagem ser enviada, existe outros metodos, mas o mais basico foi esperar 1segundo
-	*/
-	producer.Flush(1000)
+	publish("message", "teste", producer, nil, delivyChan)
+
+	e := <-delivyChan
+	response := e.(*kafka.Message)
+
+	if response.TopicPartition.Error != nil {
+		fmt.Println("Erro ao enviar a mensagem")
+	} else {
+		fmt.Println("Mensagem enviada com sucesso: ", response.TopicPartition)
+	}
 }
 
 func NewKafkaProducer() *kafka.Producer {
@@ -32,7 +37,9 @@ func NewKafkaProducer() *kafka.Producer {
 	return p
 }
 
-func publish(msg string, topic string, producer *kafka.Producer, key []byte) error {
+func publish(
+	msg string, topic string, producer *kafka.Producer, key []byte, delivyChan chan kafka.Event,
+) error {
 	message := &kafka.Message{
 		Value: []byte(msg),
 		TopicPartition: kafka.TopicPartition{
@@ -42,7 +49,7 @@ func publish(msg string, topic string, producer *kafka.Producer, key []byte) err
 		Key: key,
 	}
 
-	err := producer.Produce(message, nil)
+	err := producer.Produce(message, delivyChan)
 	if err != nil {
 		return err
 	}
